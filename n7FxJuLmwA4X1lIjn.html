@@ -1,0 +1,390 @@
+<html><head><base href="https://jikan-ai-project.com/">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Anime Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700&display=swap" rel="stylesheet">
+
+<style>
+:root {
+  --primary: #6857ee;
+  --secondary: #ff6b6b;
+  --bg: #1a1a2e;
+  --text: #ffffff;
+  --card-bg: #272741;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Nunito', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+header {
+  text-align: center;
+  padding: 2rem 0;
+  background: linear-gradient(45deg, var(--primary), var(--secondary));
+  margin-bottom: 2rem;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.search-container {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+}
+
+.search-container input {
+  flex: 1;
+  padding: 12px;
+  border: none;
+  border-radius: 8px;
+  background: var(--card-bg);
+  color: var(--text);
+  min-width: 200px;
+}
+
+.btn {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  background: var(--primary);
+  color: white;
+  cursor: pointer;
+  transition: transform 0.2s, opacity 0.2s;
+}
+
+.btn:hover {
+  transform: translateY(-2px);
+  opacity: 0.9;
+}
+
+.lists-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+}
+
+.list {
+  background: var(--card-bg);
+  border-radius: 12px;
+  padding: 1.5rem;
+  min-height: 400px;
+}
+
+.list h2 {
+  margin-bottom: 1rem;
+  color: var(--secondary);
+}
+
+.anime-card {
+  background: rgba(255,255,255,0.05);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  transition: transform 0.3s;
+}
+
+.anime-card:hover {
+  transform: translateX(5px);
+}
+
+.anime-card img {
+  width: 100%;
+  height: 200px;
+  object-fit: cover;
+  border-radius: 4px;
+  margin-bottom: 0.5rem;
+}
+
+.anime-card h3 {
+  font-size: 1.1rem;
+  margin-bottom: 0.5rem;
+}
+
+.card-buttons {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.loading {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0,0,0,0.8);
+  padding: 2rem;
+  border-radius: 12px;
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .search-container {
+    flex-direction: column;
+  }
+  
+  .lists-container {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Anime Tracker</h1>
+</header>
+
+<div class="container">
+  <div class="search-container">
+    <input type="text" id="searchInput" placeholder="Enter anime title...">
+    <button class="btn" id="searchBtn">Search</button>
+  </div>
+
+  <div class="lists-container">
+    <div class="list" id="watchedList">
+      <h2>Watched</h2>
+    </div>
+    
+    <div class="list" id="remainingList">
+      <h2>Plan to Watch</h2>
+    </div>
+  </div>
+</div>
+
+<div class="loading" id="loading">
+  <svg width="50" height="50" viewBox="0 0 50 50">
+    <circle cx="25" cy="25" r="20" fill="none" stroke="white" stroke-width="4">
+      <animate attributeName="stroke-dasharray" from="0 150" to="130 150" dur="1.5s" repeatCount="indefinite"/>
+      <animate attributeName="stroke-dashoffset" from="0" to="-125" dur="1.5s" repeatCount="indefinite"/>
+    </circle>
+  </svg>
+</div>
+
+<script>
+class AnimeTracker {
+  constructor() {
+    this.watchedList = [];
+    this.remainingList = [];
+    this.init();
+  }
+
+  init() {
+    this.searchInput = document.getElementById('searchInput');
+    this.searchBtn = document.getElementById('searchBtn');
+    this.watchedListEl = document.getElementById('watchedList');
+    this.remainingListEl = document.getElementById('remainingList');
+    this.loading = document.getElementById('loading');
+
+    this.searchBtn.addEventListener('click', () => this.searchAnime());
+    this.searchInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') this.searchAnime();
+    });
+
+    this.loadSavedData();
+    this.renderLists();
+  }
+
+  async searchAnime() {
+    const query = this.searchInput.value.trim();
+    if (!query) return;
+
+    this.loading.style.display = 'block';
+    
+    try {
+      const response = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(query)}&limit=5`);
+      const data = await response.json();
+      
+      if (data.data && data.data.length > 0) {
+        this.showSearchResults(data.data);
+      } else {
+        alert('No results found');
+      }
+    } catch (error) {
+      console.error('Error fetching anime:', error);
+      alert('Error fetching anime data');
+    } finally {
+      this.loading.style.display = 'none';
+      this.searchInput.value = '';
+    }
+  }
+
+  showSearchResults(results) {
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: var(--card-bg);
+      padding: 2rem;
+      border-radius: 12px;
+      max-width: 800px;
+      width: 90%;
+      z-index: 1000;
+      max-height: 90vh;
+      overflow-y: auto;
+    `;
+
+    const resultsHTML = results.map(anime => `
+      <div class="anime-card" style="margin-bottom: 1rem;">
+        <img alt="Anime cover image for ${anime.title}" src="${anime.images.jpg.image_url}" style="width:100px;height:150px;object-fit:cover;float:left;margin-right:1rem;">
+        <h3>${anime.title}</h3>
+        <p>${anime.synopsis ? anime.synopsis.substring(0, 150) + '...' : 'No description available'}</p>
+        <div class="details" style="margin: 10px 0;">
+          <p>Episodes: ${anime.episodes || 'N/A'}</p>
+          <p>Season: ${anime.season ? anime.season.charAt(0).toUpperCase() + anime.season.slice(1) : 'N/A'} ${anime.year || ''}</p>
+          <p>Status: ${anime.status || 'N/A'}</p>
+        </div>
+        <div class="card-buttons">
+          <button class="btn" onclick="tracker.addAnime('watched', ${JSON.stringify(anime).replace(/"/g, '&quot;')})">Add to Watched</button>
+          <button class="btn" onclick="tracker.addAnime('remaining', ${JSON.stringify(anime).replace(/"/g, '&quot;')})">Add to Plan to Watch</button>
+        </div>
+        <div style="clear:both;"></div>
+      </div>
+    `).join('');
+
+    modal.innerHTML = `
+      <h2>Search Results</h2>
+      ${resultsHTML}
+      <button class="btn" style="margin-top:1rem;" onclick="this.parentElement.remove()">Close</button>
+    `;
+
+    document.body.appendChild(modal);
+  }
+
+  addAnime(list, anime) {
+    const animeObj = {
+      id: anime.mal_id,
+      title: anime.title,
+      image: anime.images.jpg.image_url,
+      year: anime.year || 'N/A',
+      score: anime.score || 'N/A',
+      episodes: anime.episodes || 'N/A',
+      season: anime.season || 'N/A',
+      status: anime.status || 'N/A',
+      synopsis: anime.synopsis || 'No description available'
+    };
+
+    if (list === 'watched') {
+      if (!this.watchedList.find(a => a.id === animeObj.id)) {
+        this.watchedList.push(animeObj);
+      }
+    } else {
+      if (!this.remainingList.find(a => a.id === animeObj.id)) {
+        this.remainingList.push(animeObj);
+      }
+    }
+
+    this.saveData();
+    this.renderLists();
+  }
+
+  createAnimeCard(anime, list) {
+    const card = document.createElement('div');
+    card.className = 'anime-card';
+    const gogoAnimeSearch = `https://gogoanimes.fi/search.html?keyword=${encodeURIComponent(anime.title)}`;
+    
+    const expandableInfo = `
+      <div class="expandable-info" style="display: none; margin: 10px 0; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 8px;">
+        <p style="margin: 5px 0;"><strong>Episodes:</strong> ${anime.episodes || 'N/A'}</p>
+        <p style="margin: 5px 0;"><strong>Season:</strong> ${anime.season ? anime.season.charAt(0).toUpperCase() + anime.season.slice(1) : 'N/A'} ${anime.year || 'N/A'}</p>
+        <p style="margin: 5px 0;"><strong>Status:</strong> ${anime.status || 'N/A'}</p>
+        <p style="margin: 5px 0;"><strong>Synopsis:</strong> ${anime.synopsis || 'No description available'}</p>
+      </div>
+    `;
+
+    card.innerHTML = `
+      <img alt="Anime cover image for ${anime.title}" src="${anime.image}" width="200" height="300">
+      <h3>${anime.title}</h3>
+      <p>Year: ${anime.year || 'N/A'} | Score: ${anime.score || 'N/A'}</p>
+      <button class="btn" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
+        Show/Hide Details
+      </button>
+      ${expandableInfo}
+      <div class="card-buttons">
+        <button class="btn" onclick="window.open('https://google.com/search?q=${encodeURIComponent(anime.title + ' anime')}', '_blank')">Search Google</button>
+        <button class="btn" onclick="window.open('${gogoAnimeSearch}', '_blank')">Watch/Download</button>
+        <button class="btn" onclick="tracker.moveAnime('${list}', ${anime.id})">Move to ${list === 'watched' ? 'Plan to Watch' : 'Watched'}</button>
+        <button class="btn" onclick="tracker.removeAnime('${list}', ${anime.id})">Remove</button>
+      </div>
+    `;
+    return card;
+  }
+
+  moveAnime(fromList, animeId) {
+    let sourceList, targetList;
+    if (fromList === 'watched') {
+      sourceList = this.watchedList;
+      targetList = this.remainingList;
+    } else {
+      sourceList = this.remainingList;
+      targetList = this.watchedList;
+    }
+
+    const animeIndex = sourceList.findIndex(a => a.id === animeId);
+    if (animeIndex !== -1) {
+      const anime = sourceList[animeIndex];
+      sourceList.splice(animeIndex, 1);
+      targetList.push(anime);
+      this.saveData();
+      this.renderLists();
+    }
+  }
+
+  removeAnime(list, animeId) {
+    const targetList = list === 'watched' ? this.watchedList : this.remainingList;
+    const animeIndex = targetList.findIndex(a => a.id === animeId);
+    if (animeIndex !== -1) {
+      targetList.splice(animeIndex, 1);
+      this.saveData();
+      this.renderLists();
+    }
+  }
+
+  renderLists() {
+    this.watchedListEl.innerHTML = '<h2>Watched</h2>';
+    this.remainingListEl.innerHTML = '<h2>Plan to Watch</h2>';
+
+    this.watchedList.forEach(anime => {
+      this.watchedListEl.appendChild(this.createAnimeCard(anime, 'watched'));
+    });
+
+    this.remainingList.forEach(anime => {
+      this.remainingListEl.appendChild(this.createAnimeCard(anime, 'remaining'));
+    });
+  }
+
+  saveData() {
+    localStorage.setItem('animeTracker', JSON.stringify({
+      watched: this.watchedList,
+      remaining: this.remainingList
+    }));
+  }
+
+  loadSavedData() {
+    const saved = JSON.parse(localStorage.getItem('animeTracker') || '{"watched":[],"remaining":[]}');
+    this.watchedList = saved.watched;
+    this.remainingList = saved.remaining;
+  }
+}
+
+const tracker = new AnimeTracker();
+</script>
+
+</body>
+</html>
